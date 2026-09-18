@@ -1,0 +1,6 @@
+{
+  "name": "Voltra",
+  "description": "Intelligent energy control system for EV charging clusters with dynamic load allocation, grid overload prevention, departure-deadline intelligence, and renewable optimization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
