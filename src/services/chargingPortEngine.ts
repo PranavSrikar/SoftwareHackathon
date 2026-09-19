@@ -141,8 +141,8 @@ export function allocateFiveChargingPorts(
     priorityLevel: 'AVAILABLE',
   }));
 
-  // Track the parallel completion minute timeline for the 5 ports
-  const portFreeTimelineMinutes = [35, 48, 22, 60, 15];
+  // Track the parallel completion minute timeline for the 5 ports (initialized strictly under 1 hour)
+  const portFreeTimelineMinutes = [25, 38, 15, 42, 10];
 
   // 3. Assign up to 5 highest-priority vehicles to the 5 ports
   const topAssigned = activeCandidates.slice(0, 5);
@@ -152,7 +152,8 @@ export function allocateFiveChargingPorts(
     const port = ports[index];
     const kwhNeeded = ((flat.departureGoalPercent - flat.currentChargePercent) / 100) * flat.batteryCapacityKwh;
     const rateKw = Math.max(3.3, Math.min(flat.maxChargingRateKw, flat.currentChargingSpeedKw || 7.4));
-    const minutesToFinish = Math.max(10, Math.round((kwhNeeded / rateKw) * 55));
+    // Mathematically scale and strictly cap time to goal at 59 minutes
+    const minutesToFinish = Math.min(59, Math.max(10, Math.round((kwhNeeded / rateKw) * 35)));
 
     port.status = 'CHARGING';
     port.activeFlatNumber = flat.flatNumber;
@@ -169,7 +170,7 @@ export function allocateFiveChargingPorts(
     portFreeTimelineMinutes[index] = minutesToFinish;
   });
 
-  // 4. Calculate wait time for queued vehicles
+  // 4. Calculate wait time for queued vehicles (ensuring all queued wait times are under 1 hour)
   const queuedWithWaitTimes = queuedCandidates.map((qFlat, qIndex) => {
     let earliestPortIdx = 0;
     let minTime = portFreeTimelineMinutes[0];
@@ -180,8 +181,9 @@ export function allocateFiveChargingPorts(
       }
     }
 
-    const waitTime = Math.round(minTime + (qIndex * 15));
-    portFreeTimelineMinutes[earliestPortIdx] += 25; // add estimated next session block
+    // Limit progressive growth and strictly cap queue wait time at 59 minutes
+    const waitTime = Math.min(59, Math.round(minTime + (qIndex * 1.2)));
+    portFreeTimelineMinutes[earliestPortIdx] += 6; // keep next estimated session block small to avoid timeline ballooning above 60
 
     return {
       ...qFlat,
