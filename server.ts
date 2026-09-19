@@ -20,20 +20,30 @@ async function startServer() {
     next();
   });
 
-  // Initialize Gemini Client lazily to prevent startup crashes if key is missing
+  // Initialize Gemini Client lazily to prevent startup crashes if key is missing or invalid
   const getGeminiClient = () => {
-    const apiKey = process.env.GEMINI_API_KEY;
+    let apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return null;
     }
-    return new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
+    // Clean potential quotes or trailing whitespace
+    apiKey = apiKey.trim().replace(/^["']|["']$/g, '');
+    if (!apiKey) {
+      return null;
+    }
+    try {
+      return new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          },
         },
-      },
-    });
+      });
+    } catch (err) {
+      console.error('Failed to initialize GoogleGenAI client:', err);
+      return null;
+    }
   };
 
   // Voltra Domain Knowledge Base for system instructions

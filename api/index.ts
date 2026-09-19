@@ -15,18 +15,30 @@ app.use((req, res, next) => {
   next();
 });
 
-// Initialize Gemini Client
+// Initialize Gemini Client lazily to prevent startup crashes if key is missing or invalid
 const getGeminiClient = () => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return null;
-  return new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
+  let apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return null;
+  }
+  // Clean potential quotes or trailing whitespace
+  apiKey = apiKey.trim().replace(/^["']|["']$/g, '');
+  if (!apiKey) {
+    return null;
+  }
+  try {
+    return new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
       },
-    },
-  });
+    });
+  } catch (err) {
+    console.error('Failed to initialize GoogleGenAI client:', err);
+    return null;
+  }
 };
 
 const VOLTRA_SYSTEM_INSTRUCTION = `
