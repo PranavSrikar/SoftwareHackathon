@@ -22,9 +22,9 @@ import {
 import { GridState, SystemStatus } from '../types';
 import { NotificationCenterDropdown } from './NotificationCenterDropdown';
 
-import { Brain } from 'lucide-react';
+import { Brain, Bot } from 'lucide-react';
 
-export type ViewMode = 'CITIZEN' | 'CHARGING_PORTS' | 'FLOW' | 'OPERATOR' | 'SOLAR' | 'MAP' | 'ALERTS' | 'ML_INTELLIGENCE';
+export type ViewMode = 'CITIZEN' | 'CHARGING_PORTS' | 'FLOW' | 'OPERATOR' | 'SOLAR' | 'MAP' | 'ALERTS' | 'ML_INTELLIGENCE' | 'AI_ASSISTANT';
 
 interface HeaderProps {
   gridState: GridState;
@@ -191,6 +191,20 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Brain className="w-3.5 h-3.5 text-indigo-400" />
               <span>🤖 ML Intelligence</span>
+            </button>
+
+            <button
+              id="view-mode-ai-assistant"
+              onClick={() => onChangeViewMode('AI_ASSISTANT')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                activeViewMode === 'AI_ASSISTANT'
+                  ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="AI Energy Assistant Chat & Analysis Center"
+            >
+              <Bot className="w-3.5 h-3.5" />
+              <span>🤖 AI Assistant</span>
             </button>
 
             <button

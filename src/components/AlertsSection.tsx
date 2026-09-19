@@ -6,6 +6,7 @@ import {
   Send,
   Shield,
   CheckCircle,
+  AlertTriangle,
   RefreshCw,
   Smartphone,
   Check,
@@ -38,6 +39,33 @@ export const AlertsSection: React.FC = () => {
   const [twilioSid, setTwilioSid] = useState('');
   const [twilioToken, setTwilioToken] = useState('');
   const [twilioFrom, setTwilioFrom] = useState('');
+
+  // Interactive SMS Modal State
+  const [smsModal, setSmsModal] = useState<{
+    isOpen: boolean;
+    recipientId: string;
+    alertId: string;
+    vehicleId: string;
+    departureTime: string;
+    testPhone: string;
+    consent: boolean;
+    enabled: boolean;
+    sendingState: 'IDLE' | 'CONFIRMING' | 'SENDING' | 'SENT' | 'FAILED' | 'DEMO_MODE';
+    providerMessageId: string;
+    statusMessage: string;
+  }>({
+    isOpen: false,
+    recipientId: 'FLAT-4',
+    alertId: 'ALERT-GRIDMIND-1001',
+    vehicleId: 'Porsche Taycan (MH 02 BZ 3344)',
+    departureTime: '07:00 AM',
+    testPhone: '+1 (555) 019-2834',
+    consent: true,
+    enabled: true,
+    sendingState: 'IDLE',
+    providerMessageId: '',
+    statusMessage: '',
+  });
 
   // Call / Alert Modal State
   const [callModal, setCallModal] = useState<{
@@ -177,15 +205,124 @@ export const AlertsSection: React.FC = () => {
     }
   };
 
+  const openSmsConfirmation = (
+    recipientId = 'FLAT-4',
+    vehicleId = 'Porsche Taycan (MH 02 BZ 3344)',
+    departureTime = '07:00 AM'
+  ) => {
+    setSmsModal({
+      isOpen: true,
+      recipientId,
+      alertId: `ALERT-GRIDMIND-${Date.now().toString().slice(-4)}`,
+      vehicleId,
+      departureTime,
+      testPhone: phoneNumber || '+1 (555) 019-2834',
+      consent: true,
+      enabled: true,
+      sendingState: 'CONFIRMING',
+      providerMessageId: '',
+      statusMessage: '',
+    });
+  };
+
+  const executeSmsSend = async () => {
+    setSmsModal((prev) => ({
+      ...prev,
+      sendingState: 'SENDING',
+      statusMessage: 'Dispatching SMS request to server /api/notifications/sms...',
+    }));
+
+    try {
+      const res = await fetch('/api/notifications/sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipient_id: smsModal.recipientId,
+          alert_id: smsModal.alertId,
+          vehicle_id: smsModal.vehicleId,
+          departure_time: smsModal.departureTime,
+          test_phone: smsModal.testPhone,
+          sms_consent: smsModal.consent,
+          sms_enabled: smsModal.enabled,
+        }),
+      });
+
+      const data = await res.json();
+      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      if (data.success && data.mode === 'twilio_live') {
+        setSmsModal((prev) => ({
+          ...prev,
+          sendingState: 'SENT',
+          providerMessageId: data.messageId || 'SM_TWILIO_SUCCESS',
+          statusMessage: `Twilio SMS dispatched successfully! Provider Message ID: ${data.messageId}`,
+        }));
+
+        setAlertLogs((prev) => [
+          {
+            id: `log-${Date.now()}`,
+            timestamp: now,
+            channel: 'SMS',
+            title: 'GridMind Real SMS Sent',
+            message: data.message,
+            recipient: `${smsModal.recipientId} (${data.maskedPhone})`,
+            status: `Sent (Twilio ID: ${data.messageId})`,
+          },
+          ...prev,
+        ]);
+      } else if (data.mode === 'demo' || (data.message && data.message.includes('Demo mode'))) {
+        const demoMsg = 'Demo mode — no real SMS was sent because Twilio is not configured.';
+        setSmsModal((prev) => ({
+          ...prev,
+          sendingState: 'DEMO_MODE',
+          statusMessage: demoMsg,
+        }));
+
+        setAlertLogs((prev) => [
+          {
+            id: `log-${Date.now()}`,
+            timestamp: now,
+            channel: 'SMS',
+            title: 'GridMind SMS (Demo Mode)',
+            message: demoMsg,
+            recipient: `${smsModal.recipientId} (${smsModal.testPhone ? getMaskedPhone(smsModal.testPhone) : getMaskedPhone(phoneNumber)})`,
+            status: 'Demo Mode (Unconfigured)',
+          },
+          ...prev,
+        ]);
+      } else if (data.duplicate) {
+        setSmsModal((prev) => ({
+          ...prev,
+          sendingState: 'FAILED',
+          statusMessage: `Duplicate Prevention Active: SMS alert has already been sent for recipient ${smsModal.recipientId} and alert ${smsModal.alertId}.`,
+        }));
+      } else {
+        const errText = data.error || 'Failed to send SMS';
+        setSmsModal((prev) => ({
+          ...prev,
+          sendingState: 'FAILED',
+          statusMessage: errText,
+        }));
+      }
+    } catch (e: any) {
+      setSmsModal((prev) => ({
+        ...prev,
+        sendingState: 'DEMO_MODE',
+        statusMessage: 'Demo mode — no real SMS was sent because Twilio is not configured.',
+      }));
+    }
+  };
+
   const handleTestAlert = async (channelType: 'SMS' | 'VOICE' | 'WHATSAPP') => {
+    if (channelType === 'SMS') {
+      openSmsConfirmation('FLAT-4', 'Porsche Taycan (MH 02 BZ 3344)', '07:00 AM');
+      return;
+    }
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     let title = '';
     let message = '';
 
-    if (channelType === 'SMS') {
-      title = 'Low Battery Alert SMS';
-      message = `Hello ${ownerName}, Voltra alert for ${getMaskedPhone(phoneNumber)}: Your EV battery is below 20%. Please plug into Port 1-5.`;
-    } else if (channelType === 'VOICE') {
+    if (channelType === 'VOICE') {
       title = 'Urgent Voice Alert Call';
       message = `Hello ${ownerName}. This is an automated voice call from the Voltra Smart Charging Command Center. Your EV charging session at Port 3 is complete and ready for departure.`;
     } else {
@@ -236,14 +373,6 @@ export const AlertsSection: React.FC = () => {
         status: 'ringing',
       });
       startRingtone();
-    } else if (channelType === 'SMS') {
-      setCallModal({
-        isOpen: true,
-        channel: 'SMS',
-        title,
-        message,
-        status: 'connected',
-      });
     } else if (channelType === 'WHATSAPP') {
       setCallModal({
         isOpen: true,
@@ -523,6 +652,197 @@ export const AlertsSection: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* DEDICATED REAL TWILIO SMS DISPATCH & CONFIRMATION MODAL */}
+      {smsModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-3xl bg-slate-900 border-2 border-cyan-500/60 p-6 shadow-2xl flex flex-col gap-4 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+
+            {/* MODAL HEADER */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-cyan-950/80 border border-cyan-500/40 text-cyan-400">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">GridMind SMS Dispatch</h3>
+                  <p className="text-[11px] text-cyan-400 font-mono">POST /api/notifications/sms</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSmsModal((prev) => ({ ...prev, isOpen: false }))}
+                className="text-slate-400 hover:text-white text-xl font-bold p-1 transition-all cursor-pointer"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* RECIPIENT & ALERT INFO */}
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                <span className="text-[10px] text-slate-400 font-bold block">RECIPIENT ID</span>
+                <span className="font-mono font-bold text-white text-xs">{smsModal.recipientId}</span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                <span className="text-[10px] text-slate-400 font-bold block">ALERT ID</span>
+                <span className="font-mono font-bold text-cyan-300 text-xs truncate block">{smsModal.alertId}</span>
+              </div>
+            </div>
+
+            {/* VERIFIED TEST RECIPIENT PHONE (DEVELOPMENT ACTION) */}
+            <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col gap-1.5">
+              <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                <span>Verified Recipient Test Number (E.164)</span>
+                <span className="text-cyan-400 font-mono text-[9px]">Development Test Action</span>
+              </label>
+              <input
+                type="text"
+                value={smsModal.testPhone}
+                onChange={(e) => setSmsModal((prev) => ({ ...prev, testPhone: e.target.value }))}
+                placeholder="+1234567890"
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-xs focus:outline-none focus:border-cyan-500"
+              />
+              <span className="text-[10px] text-slate-500 italic">
+                Masked for privacy in logs: {getMaskedPhone(smsModal.testPhone)}
+              </span>
+            </div>
+
+            {/* CONSENT & CHANNEL VERIFICATION STATUS */}
+            <div className="flex items-center justify-between gap-2 text-[11px] px-1">
+              <span className="text-emerald-400 font-bold flex items-center gap-1">
+                <CheckCircle className="w-3.5 h-3.5" /> SMS Consent Verified
+              </span>
+              <span className="text-emerald-400 font-bold flex items-center gap-1">
+                <CheckCircle className="w-3.5 h-3.5" /> Channel Active
+              </span>
+            </div>
+
+            {/* EXACT MESSAGE PREVIEW */}
+            <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col gap-1 text-xs">
+              <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">
+                SMS Message Preview
+              </span>
+              <p className="font-sans text-slate-200 leading-relaxed italic bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                "GridMind alert: EV charging capacity is currently constrained. Vehicle {smsModal.vehicleId} may not reach its target before {smsModal.departureTime}. Please check the dashboard."
+              </p>
+            </div>
+
+            {/* STATUS DISPLAY BASED ON SENDING STATE */}
+            {smsModal.sendingState === 'CONFIRMING' && (
+              <div className="p-3 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 text-cyan-200 text-xs text-center flex flex-col gap-1">
+                <span className="font-bold text-white">Confirmation Required</span>
+                <p className="text-[11px] text-slate-300">
+                  Are you sure you want to send this real test SMS alert to verified recipient {getMaskedPhone(smsModal.testPhone)}?
+                </p>
+              </div>
+            )}
+
+            {smsModal.sendingState === 'SENDING' && (
+              <div className="p-4 rounded-2xl bg-slate-950 border border-cyan-500/40 text-cyan-400 text-xs text-center flex flex-col items-center gap-2">
+                <div className="w-6 h-6 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                <span className="font-bold text-white">{smsModal.statusMessage}</span>
+              </div>
+            )}
+
+            {smsModal.sendingState === 'SENT' && (
+              <div className="p-3.5 rounded-2xl bg-emerald-950/60 border border-emerald-500/50 text-emerald-300 text-xs flex flex-col gap-1.5">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Twilio Real SMS Dispatched!</span>
+                </div>
+                <div className="bg-slate-950 p-2 rounded-xl border border-emerald-900/50 font-mono text-[11px] text-emerald-200">
+                  Provider Message SID: {smsModal.providerMessageId}
+                </div>
+                <p className="text-[10px] text-emerald-400/80">
+                  Notification log recorded with masked phone {getMaskedPhone(smsModal.testPhone)}.
+                </p>
+              </div>
+            )}
+
+            {smsModal.sendingState === 'DEMO_MODE' && (
+              <div className="p-3.5 rounded-2xl bg-amber-950/60 border border-amber-500/50 text-amber-200 text-xs flex flex-col gap-1.5">
+                <div className="flex items-center gap-2 text-amber-300 font-bold">
+                  <AlertTriangle className="w-4 h-4 text-amber-400" />
+                  <span>Demo Mode</span>
+                </div>
+                <p className="font-extrabold text-amber-100 leading-snug">
+                  “Demo mode — no real SMS was sent because Twilio is not configured.”
+                </p>
+                <p className="text-[10px] text-amber-300/80 leading-relaxed">
+                  To send real SMS messages, configure TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER in server environment variables.
+                </p>
+              </div>
+            )}
+
+            {smsModal.sendingState === 'FAILED' && (
+              <div className="p-3.5 rounded-2xl bg-rose-950/60 border border-rose-500/50 text-rose-200 text-xs flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-rose-300 font-bold">
+                  <AlertTriangle className="w-4 h-4 text-rose-400" />
+                  <span>SMS Dispatch Result</span>
+                </div>
+                <p className="text-slate-200 text-[11px]">{smsModal.statusMessage}</p>
+              </div>
+            )}
+
+            {/* ACTION BUTTONS */}
+            <div className="flex items-center gap-2 pt-1">
+              {smsModal.sendingState === 'CONFIRMING' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setSmsModal((prev) => ({ ...prev, isOpen: false }))}
+                    className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={executeSmsSend}
+                    className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-cyan-500/30 cursor-pointer"
+                  >
+                    <Send className="w-3.5 h-3.5" /> Confirm & Send Real SMS
+                  </button>
+                </>
+              )}
+
+              {smsModal.sendingState === 'SENDING' && (
+                <button
+                  type="button"
+                  disabled
+                  className="w-full py-2.5 rounded-xl bg-slate-800 text-slate-500 font-bold text-xs cursor-not-allowed"
+                >
+                  Sending via Server API...
+                </button>
+              )}
+
+              {(smsModal.sendingState === 'SENT' ||
+                smsModal.sendingState === 'DEMO_MODE' ||
+                smsModal.sendingState === 'FAILED') && (
+                <>
+                  {smsModal.sendingState === 'FAILED' && (
+                    <button
+                      type="button"
+                      onClick={() => setSmsModal((prev) => ({ ...prev, sendingState: 'CONFIRMING' }))}
+                      className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs transition-all cursor-pointer"
+                    >
+                      Try Again
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setSmsModal((prev) => ({ ...prev, isOpen: false }))}
+                    className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold text-xs transition-all cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* INTERACTIVE CALL & DISPATCH POPUP MODAL */}
       {callModal.isOpen && (

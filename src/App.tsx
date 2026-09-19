@@ -641,6 +641,18 @@ export default function App() {
           </div>
         )}
 
+        {/* VIEW: DEDICATED FULL-SCREEN AI ENERGY ASSISTANT */}
+        {activeViewMode === 'AI_ASSISTANT' && (
+          <SmartAiChatbot
+            isFullPage={true}
+            vehicles={vehicles}
+            gridState={gridState}
+            solarData={solarData}
+            portSummary={portSummary}
+            selectedVehicleId={selectedEvId}
+          />
+        )}
+
         {/* VIEW 5: FULL GRID OPERATOR CONSOLE */}
         {activeViewMode === 'OPERATOR' && (
           <div className="flex flex-col gap-6 animate-in fade-in duration-300">
@@ -719,8 +731,17 @@ export default function App() {
         onClose={() => setIsNotificationSettingsOpen(false)}
       />
 
-      {/* Smart AI Chatbot Pop-up (Draggable) */}
-      <SmartAiChatbot />
+      {/* Smart AI Chatbot Pop-up (Draggable) - Hidden when activeViewMode is AI_ASSISTANT */}
+      {activeViewMode !== 'AI_ASSISTANT' && (
+        <SmartAiChatbot
+          isFullPage={false}
+          vehicles={vehicles}
+          gridState={gridState}
+          solarData={solarData}
+          portSummary={portSummary}
+          selectedVehicleId={selectedEvId}
+        />
+      )}
     </div>
   );
 }

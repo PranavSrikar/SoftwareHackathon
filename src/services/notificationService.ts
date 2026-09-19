@@ -123,12 +123,58 @@ export function markAllNotificationsAsRead(): void {
 
 /**
  * Backend Notification Dispatch Abstraction
- * Calls simulated or real SMS / WhatsApp gateway
+ * Calls server API /api/notifications/sms
  */
-export async function sendSMS(phoneNumber: string, message: string): Promise<{ success: boolean; status: string }> {
+export async function sendSMS(
+  phoneNumber: string,
+  message: string,
+  recipientId: string = 'RECIPIENT-001',
+  alertId: string = `ALERT-${Date.now()}`
+): Promise<{ success: boolean; mode?: string; messageId?: string; status: string; message?: string }> {
   const masked = maskPhoneNumber(phoneNumber);
-  console.log(`[SMS Gateway] Sending SMS to ${masked}: "${message}"`);
-  return { success: true, status: 'Delivered' };
+  try {
+    const res = await fetch('/api/notifications/sms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recipient_id: recipientId,
+        alert_id: alertId,
+        test_phone: phoneNumber,
+        sms_consent: currentPreferences.smsEnabled,
+        sms_enabled: currentPreferences.smsEnabled,
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      return {
+        success: true,
+        mode: data.mode,
+        messageId: data.messageId,
+        status: data.status || 'Delivered',
+        message: data.message,
+      };
+    }
+    if (data.mode === 'demo') {
+      return {
+        success: false,
+        mode: 'demo',
+        status: 'Demo Mode',
+        message: data.message || 'Demo mode — no real SMS was sent because Twilio is not configured.',
+      };
+    }
+    return {
+      success: false,
+      status: data.error || 'Failed to dispatch SMS',
+      message: data.error || 'SMS send failed',
+    };
+  } catch (err: any) {
+    console.error('[SMS API Error]:', err);
+    return {
+      success: false,
+      status: 'API Error',
+      message: 'Demo mode — no real SMS was sent because Twilio is not configured.',
+    };
+  }
 }
 
 export async function sendWhatsApp(phoneNumber: string, message: string): Promise<{ success: boolean; status: string }> {

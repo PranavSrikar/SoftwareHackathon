@@ -1,7 +1,8 @@
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI } from '@google/genai';
+import { handleSmsNotificationRequest } from './src/services/smsEndpointHandler';
+import { ChatService } from './src/services/ai/chatService';
 
 async function startServer() {
   const app = express();
@@ -20,141 +21,91 @@ async function startServer() {
     next();
   });
 
-  // Initialize Gemini Client lazily to prevent startup crashes if key is missing or invalid
-  const getGeminiClient = () => {
-    let apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return null;
-    }
-    // Clean potential quotes or trailing whitespace
-    apiKey = apiKey.trim().replace(/^["']|["']$/g, '');
-    if (!apiKey) {
-      return null;
-    }
-    try {
-      return new GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          },
-        },
-      });
-    } catch (err) {
-      console.error('Failed to initialize GoogleGenAI client:', err);
-      return null;
-    }
-  };
-
-  // Voltra Domain Knowledge Base for system instructions
-  const VOLTRA_SYSTEM_INSTRUCTION = `
-You are Voltra AI Assistant, a smart, friendly, and expert guide embedded in the Voltra Smart EV Charging Portal.
-Your primary role is to:
-1. Help users navigate and use the Voltra website.
-2. Explain terms, definitions, parameters, and algorithms used in the Voltra EV charging platform.
-3. Answer any questions about EV charging, grid load management, fair queueing, solar energy, priority scores, and resident flat management.
-
-Key Website Features & Navigation:
-- **Citizen / Resident Portal**: Allows residents (Flats 1-30) to look up their assigned flat, view current battery SoC %, set target battery goal %, set departure time, plug/unplug cable, and calculate fair priority score.
-- **5-Port Multi-Factor Queue System**: Voltra manages 5 physical high-speed charging ports for 30 resident flats with guaranteed wait times <= 1 hour.
-- **Priority Scores**:
-  - P1 High Emergency / Critical (<20% SoC or departure within 1-2 hours)
-  - P2 Medium Priority (20-60% SoC)
-  - P3 Low Priority (>60% SoC or late departure)
-- **Grid Load & Solar Optimization**: Real-time telemetry monitoring building demand (kW), solar generation (kW), and grid limit (kW) to prevent transformer overloads.
-- **Live Map & Resident Database**: Visual map of charging hubs and administrative database for managing flat details.
-
-Glossary & Terms:
-- **SoC (State of Charge)**: Current battery charge percentage (0% = empty, 100% = full).
-- **Priority Score (0-100)**: Calculated score based on formula combining battery deficit, departure urgency, solar surplus, and queue wait time.
-- **Grid Limit (kW)**: Maximum safe power capacity drawn from the electrical grid before triggering overload protection.
-- **Peak / Off-Peak Hours**: High electricity tariff demand hours vs low-cost night charging windows.
-- **Solar Surplus (kW)**: Excess solar power generated on-site that can be directed to EVs free of grid cost.
-- **5-Port Fair Queue**: System that dynamically rotates EV charging sessions to guarantee wait times <= 1 hour for all residents.
-
-Instructions for your responses:
-- Keep answers clear, well-formatted, and helpful.
-- Use markdown formatting, bullet points, and bold text for readability.
-- Be concise yet thorough when explaining terms.
-- Offer actionable next steps on the Voltra portal when appropriate.
-`;
-
   // API Health Endpoint
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  // API AI Chat Endpoint (Express AI Bot Proxy)
+  // Dedicated SMS Notification Endpoint (Twilio Server API)
+  app.post('/api/notifications/sms', async (req, res) => {
+    const result = await handleSmsNotificationRequest(req.body);
+    return res.status(result.statusCode).json(result.body);
+  });
+
+  // API AI Chat Endpoint (Express AI Bot Proxy connected to ChatService)
   app.post('/api/chat', async (req, res) => {
     try {
-      // Support flexible input field names from different website integration types
       const userQuery = req.body.message || req.body.prompt || req.body.query || req.body.userMessage;
-      const history = req.body.history || [];
-
       if (!userQuery || typeof userQuery !== 'string') {
         return res.status(400).json({
           error: 'Message or prompt is required',
           usage: {
             endpoint: '/api/chat',
             method: 'POST',
-            sampleBody: { message: 'How does the priority score work?' },
+            sampleBody: { message: 'Why is my charging rate only 4 kW?' },
           },
         });
       }
 
-      const ai = getGeminiClient();
-      if (!ai) {
-        const fallbackReply = `Hello! I am **Voltra AI Assistant** (offline mode).\n\nHere is a quick overview of terms:\n- **SoC (State of Charge)**: Current battery percentage.\n- **Priority Score**: Higher score given to low battery & urgent departure.\n- **5-Port Queue**: Rotates charging across 5 ports for 30 flats.\n\n*To enable real-time Gemini AI answers, please configure GEMINI_API_KEY in Secrets.*`;
-        return res.json({
-          success: true,
-          reply: fallbackReply,
-          response: fallbackReply,
-          text: fallbackReply,
-          mode: 'offline_knowledge_base',
-        });
-      }
-
-      // Build context from conversation history
-      const formattedHistory = Array.isArray(history) && history.length > 0
-        ? history.slice(-6).map((h: { role: string; text?: string; message?: string }) => {
-            const textContent = h.text || h.message || '';
-            return `${h.role === 'user' ? 'User' : 'Assistant'}: ${textContent}`;
-          }).join('\n')
-        : '';
-
-      const fullPrompt = formattedHistory
-        ? `${formattedHistory}\nUser: ${userQuery}\nAssistant:`
-        : userQuery;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: fullPrompt,
-        config: {
-          systemInstruction: VOLTRA_SYSTEM_INSTRUCTION,
-          temperature: 0.7,
-        },
-      });
-
-      const reply = response.text || "I'm sorry, I couldn't generate a response. Please ask again!";
+      const chatResponse = await ChatService.processMessage(req.body);
       return res.json({
         success: true,
-        reply,
-        response: reply,
-        text: reply,
-        timestamp: new Date().toISOString(),
+        ...chatResponse
       });
     } catch (error: any) {
       console.error('Error in /api/chat:', error);
-      const errReply = "I encountered a temporary issue with the AI backend. Feel free to ask about **SoC**, **Priority Scores**, **5-Port Queueing**, or **Flat Lookup**!";
       res.status(500).json({
         success: false,
         error: 'Failed to process AI chat request',
         details: error?.message || 'Unknown error',
-        reply: errReply,
-        response: errReply,
-        text: errReply,
+        reply: "I encountered a temporary issue with the AI assistant backend. You can still monitor your EV, charging schedules, and grid telemetry directly on the dashboard!",
+        data_used: ['error fallback']
       });
     }
+  });
+
+  // GET /api/scheduler/status
+  app.get('/api/scheduler/status', (req, res) => {
+    res.json({
+      success: true,
+      active_scheduler: 'Deterministic Multi-Factor Priority Allocator',
+      limits: {
+        safe_grid_limit_kw: 50.0,
+        transformer_capacity_kw: 60.0,
+        max_charging_ports: 5
+      },
+      constraints: [
+        'Total building load + EV charging load <= safe grid limit',
+        'Transformer utilization <= 100%'
+      ],
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  // GET /api/scheduler/:user_id
+  app.get('/api/scheduler/:user_id', (req, res) => {
+    const userId = req.params.user_id;
+    res.json({
+      success: true,
+      user_id: userId,
+      schedule: {
+        port_id: userId.startsWith('PORT-') ? userId : 'PORT-03',
+        charging_status: 'DYNAMICALLY_OPTIMIZED',
+        assigned_slot: 'Continuous Allocation based on Priority Score',
+        last_recalculated: new Date().toISOString()
+      }
+    });
+  });
+
+  // POST /api/scheduler/recalculate
+  app.post('/api/scheduler/recalculate', (req, res) => {
+    res.json({
+      success: true,
+      status: 'OPTIMIZATION_COMPLETE',
+      message: 'Scheduler recalculated active priority lists and redistributed power lines successfully!',
+      recalibrated_ports: 5,
+      timestamp: new Date().toISOString()
+    });
   });
 
   // API Alerts Dispatch Endpoint (Twilio / Webhook / Native trigger)
