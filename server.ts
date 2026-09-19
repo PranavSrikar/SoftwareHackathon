@@ -9,6 +9,17 @@ async function startServer() {
 
   app.use(express.json({ limit: '10mb' }));
 
+  // CORS middleware for website integration
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+    next();
+  });
+
   // Initialize Gemini Client lazily to prevent startup crashes if key is missing
   const getGeminiClient = () => {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -63,29 +74,47 @@ Instructions for your responses:
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  // API AI Chat Endpoint
+  // API AI Chat Endpoint (Express AI Bot Proxy)
   app.post('/api/chat', async (req, res) => {
     try {
-      const { message, history } = req.body;
-      if (!message || typeof message !== 'string') {
-        return res.status(400).json({ error: 'Message is required' });
+      // Support flexible input field names from different website integration types
+      const userQuery = req.body.message || req.body.prompt || req.body.query || req.body.userMessage;
+      const history = req.body.history || [];
+
+      if (!userQuery || typeof userQuery !== 'string') {
+        return res.status(400).json({
+          error: 'Message or prompt is required',
+          usage: {
+            endpoint: '/api/chat',
+            method: 'POST',
+            sampleBody: { message: 'How does the priority score work?' },
+          },
+        });
       }
 
       const ai = getGeminiClient();
       if (!ai) {
+        const fallbackReply = `Hello! I am **Voltra AI Assistant** (offline mode).\n\nHere is a quick overview of terms:\n- **SoC (State of Charge)**: Current battery percentage.\n- **Priority Score**: Higher score given to low battery & urgent departure.\n- **5-Port Queue**: Rotates charging across 5 ports for 30 flats.\n\n*To enable real-time Gemini AI answers, please configure GEMINI_API_KEY in Secrets.*`;
         return res.json({
-          reply: `Hello! I am **Voltra AI Assistant** (offline mode).\n\nHere is a quick overview of terms:\n- **SoC (State of Charge)**: Current battery percentage.\n- **Priority Score**: Higher score given to low battery & urgent departure.\n- **5-Port Queue**: Rotates charging across 5 ports for 30 flats.\n\n*To enable real-time Gemini AI answers, please configure GEMINI_API_KEY in Secrets.*`,
+          success: true,
+          reply: fallbackReply,
+          response: fallbackReply,
+          text: fallbackReply,
+          mode: 'offline_knowledge_base',
         });
       }
 
       // Build context from conversation history
       const formattedHistory = Array.isArray(history) && history.length > 0
-        ? history.slice(-6).map((h: { role: string; text: string }) => `${h.role === 'user' ? 'User' : 'Assistant'}: ${h.text}`).join('\n')
+        ? history.slice(-6).map((h: { role: string; text?: string; message?: string }) => {
+            const textContent = h.text || h.message || '';
+            return `${h.role === 'user' ? 'User' : 'Assistant'}: ${textContent}`;
+          }).join('\n')
         : '';
 
       const fullPrompt = formattedHistory
-        ? `${formattedHistory}\nUser: ${message}\nAssistant:`
-        : message;
+        ? `${formattedHistory}\nUser: ${userQuery}\nAssistant:`
+        : userQuery;
 
       const response = await ai.models.generateContent({
         model: 'gemini-3.8-flash',
@@ -97,13 +126,23 @@ Instructions for your responses:
       });
 
       const reply = response.text || "I'm sorry, I couldn't generate a response. Please ask again!";
-      res.json({ reply });
+      return res.json({
+        success: true,
+        reply,
+        response: reply,
+        text: reply,
+        timestamp: new Date().toISOString(),
+      });
     } catch (error: any) {
       console.error('Error in /api/chat:', error);
+      const errReply = "I encountered a temporary issue with the AI backend. Feel free to ask about **SoC**, **Priority Scores**, **5-Port Queueing**, or **Flat Lookup**!";
       res.status(500).json({
+        success: false,
         error: 'Failed to process AI chat request',
         details: error?.message || 'Unknown error',
-        reply: "I encountered a temporary issue with the AI backend. Feel free to ask about **SoC**, **Priority Scores**, **5-Port Queueing**, or **Flat Lookup**!",
+        reply: errReply,
+        response: errReply,
+        text: errReply,
       });
     }
   });

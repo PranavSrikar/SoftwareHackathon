@@ -154,7 +154,7 @@ export const PowerFlowDiagram: React.FC<PowerFlowDiagramProps> = ({
       setThrottlingEvKw(22.0);
     } else if (stepNumber === 5) {
       setSimSolarKw(0.0);
-      setThrottlingEvKw(8.0);
+      setThrottlingEvKw(2.0);
     } else if (stepNumber === 6) {
       setSimSolarKw(0.0);
       setThrottlingEvKw(2.0);
@@ -223,14 +223,14 @@ export const PowerFlowDiagram: React.FC<PowerFlowDiagramProps> = ({
     isOverload = true;
     isSafe = false;
   } else if (activeStep === 5) {
-    // Step 5: EV Charging is actively throttled (Solar = 0 kW)
+    // Step 5: EV Charging is actively throttled down by 20 kW to 2.0 kW (Solar = 0 kW)
     buildingLoad = 48.0;
     solarGen = 0.0;
-    evClusterLoad = throttlingEvKw;
-    totalGridImport = 48.0 + throttlingEvKw;
+    evClusterLoad = 2.0;
+    totalGridImport = 48.0 + evClusterLoad; // Exactly 50.0 kW In
     isThrottling = true;
-    isOverload = totalGridImport > 50.0;
-    isSafe = totalGridImport <= 50.0;
+    isOverload = false; // 50.0 kW fits maximum feeder limit perfectly (SAFE)
+    isSafe = true;
   } else if (activeStep === 6) {
     // Step 6: Grid safe state (48 + 2 = 50 kW, Solar = 0 kW)
     buildingLoad = 48.0;
@@ -826,10 +826,10 @@ export const PowerFlowDiagram: React.FC<PowerFlowDiagramProps> = ({
             {/* HTML OVERLAY BOXES ON SVG */}
             {/* 1. GRID NODE (TOP LEFT) */}
             <div className={`absolute top-3 left-2 sm:left-3 w-32 sm:w-36 p-2 rounded-xl bg-slate-950/95 border-2 shadow-xl ${
-              isOverload ? 'border-rose-500 shadow-rose-950/60' : 'border-cyan-500/60 shadow-cyan-950/40'
+              isOverload ? 'border-rose-500 shadow-rose-950/60' : (isSafe ? 'border-emerald-500/80 shadow-emerald-950/40' : 'border-cyan-500/60 shadow-cyan-950/40')
             }`}>
               <div className="flex items-center justify-between mb-0.5">
-                <span className={`text-[9px] font-bold flex items-center gap-1 ${isOverload ? 'text-rose-400' : 'text-cyan-400'}`}>
+                <span className={`text-[9px] font-bold flex items-center gap-1 ${isOverload ? 'text-rose-400' : (isSafe ? 'text-emerald-400' : 'text-cyan-400')}`}>
                   <Zap className="w-3 h-3" />
                   GRID
                 </span>
@@ -837,12 +837,12 @@ export const PowerFlowDiagram: React.FC<PowerFlowDiagramProps> = ({
                   50 kW MAX
                 </span>
               </div>
-              <div className={`text-sm sm:text-base font-bold font-mono ${isOverload ? 'text-rose-400 animate-pulse' : 'text-slate-100'}`}>
+              <div className={`text-sm sm:text-base font-bold font-mono ${isOverload ? 'text-rose-400 animate-pulse' : (isSafe ? 'text-emerald-300' : 'text-slate-100')}`}>
                 {totalGridImport.toFixed(1)} <span className="text-[10px] text-slate-400 font-normal">kW In</span>
               </div>
               <div className="text-[9px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
-                <span className={`w-1.5 h-1.5 rounded-full ${isOverload ? 'bg-rose-500 animate-ping' : 'bg-cyan-400'}`} />
-                {isOverload ? 'Exceeded!' : 'Safe Feeder'}
+                <span className={`w-1.5 h-1.5 rounded-full ${isOverload ? 'bg-rose-500 animate-ping' : 'bg-emerald-400'}`} />
+                {isOverload ? 'Exceeded / Breaker Trip Risk!' : 'SAFE / Zero Breaker Trip'}
               </div>
             </div>
 
