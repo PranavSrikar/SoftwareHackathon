@@ -26,6 +26,7 @@ import { NotificationSettingsModal } from './components/NotificationSettingsModa
 import { AlertsSection } from './components/AlertsSection';
 import { ChargingPortsSection } from './components/ChargingPortsSection';
 import { SmartAiChatbot } from './components/SmartAiChatbot';
+import { MlIntelligenceView } from './components/MlIntelligenceView';
 
 import { 
   EVVehicle, 
@@ -612,6 +613,31 @@ export default function App() {
         {activeViewMode === 'ALERTS' && (
           <div className="flex flex-col gap-6 animate-in fade-in duration-300">
             <AlertsSection />
+          </div>
+        )}
+
+        {/* VIEW: ML INTELLIGENCE COMMAND CENTER */}
+        {activeViewMode === 'ML_INTELLIGENCE' && (
+          <div className="flex flex-col gap-6 animate-in fade-in duration-300">
+            <MlIntelligenceView
+              vehicles={vehicles}
+              buildingDemandKw={gridState.buildingDemandKw}
+              solarKw={gridState.solarGenerationKw}
+              stations={[]}
+              weatherData={solarData || {
+                temperatureC: 28,
+                condition: 'Sunny / Clear',
+                cloudCoverPercent: 20,
+                solarIrradianceKw: 0.85,
+                uvIndex: 7,
+                windSpeedKmh: 12,
+                sunriseTime: '06:12 AM',
+                sunsetTime: '06:45 PM',
+                forecast: [],
+                dataSource: 'SIMULATION',
+                lastUpdated: new Date().toLocaleTimeString(),
+              }}
+            />
           </div>
         )}
 

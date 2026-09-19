@@ -22,7 +22,9 @@ import {
 import { GridState, SystemStatus } from '../types';
 import { NotificationCenterDropdown } from './NotificationCenterDropdown';
 
-export type ViewMode = 'CITIZEN' | 'CHARGING_PORTS' | 'FLOW' | 'OPERATOR' | 'SOLAR' | 'MAP' | 'ALERTS';
+import { Brain } from 'lucide-react';
+
+export type ViewMode = 'CITIZEN' | 'CHARGING_PORTS' | 'FLOW' | 'OPERATOR' | 'SOLAR' | 'MAP' | 'ALERTS' | 'ML_INTELLIGENCE';
 
 interface HeaderProps {
   gridState: GridState;
@@ -175,6 +177,20 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Activity className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Energy Flow</span>
+            </button>
+
+            <button
+              id="view-mode-ml"
+              onClick={() => onChangeViewMode('ML_INTELLIGENCE')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                activeViewMode === 'ML_INTELLIGENCE'
+                  ? 'bg-indigo-500 text-white font-bold shadow-md shadow-indigo-500/30'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="ML Intelligence & Predictive Models Command Center"
+            >
+              <Brain className="w-3.5 h-3.5 text-indigo-400" />
+              <span>🤖 ML Intelligence</span>
             </button>
 
             <button

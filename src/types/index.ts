@@ -226,6 +226,125 @@ export interface StationMapItem {
   renewablePercent: number;
   status: 'AVAILABLE' | 'MODERATE' | 'CONGESTED';
   isFastCharger: boolean;
+  predicted30mOccupancyPercent?: number;
+  predicted30mWaitMins?: number;
+  predictedStatus?: 'GREEN' | 'YELLOW' | 'RED';
+}
+
+// Machine Learning System Interfaces
+export type MlModelType = 'Random Forest Regressor' | 'Gradient Boosting' | 'Ridge Linear Baseline' | 'Isolation Forest' | 'Heuristic Simulation';
+
+export interface MlModelStatusCard {
+  id: string;
+  name: string;
+  modelType: MlModelType;
+  status: 'ACTIVE' | 'TRAINING' | 'STANDBY';
+  dataSourceLabel: 'LIVE API' | 'SIMULATED DATA' | 'HYBRID DATASET';
+  predictionHorizon: '15 min' | '30 min' | '1 hour' | '6 hours' | '24 hours';
+  confidencePercent: number;
+  lastUpdated: string;
+  modelCategoryLabel: 'Simulation Model' | 'Trained ML Model' | 'Demo Model';
+  mae: number;
+  rmse: number;
+  r2Score: number;
+  samplesCount: number;
+}
+
+export interface MlFeatureImportance {
+  featureName: string;
+  importancePercentage: number;
+  description: string;
+}
+
+export interface LoadForecastPoint {
+  timeLabel: string; // e.g. "Now", "+15m", "+30m", "+1h", "+2h", "+6h", "+24h"
+  actualBuildingKw: number;
+  predictedBuildingKw: number;
+  safeGridCapacityKw: number;
+  solarGenerationKw: number;
+  predictedSolarKw: number;
+  evDemandKw: number;
+  predictedEvDemandKw: number;
+  transformerUtilizationPercent: number;
+}
+
+export interface StationCongestionPrediction {
+  stationId: string;
+  stationName: string;
+  currentOccupancyPercent: number;
+  availablePorts: number;
+  totalPorts: number;
+  availablePowerKw: number;
+  predicted30mOccupancyPercent: number;
+  predicted30mQueueLength: number;
+  predicted30mWaitMins: number;
+  predicted30mStatus: 'GREEN' | 'YELLOW' | 'RED';
+  predicted60mOccupancyPercent: number;
+  predicted60mQueueLength: number;
+  predicted60mWaitMins: number;
+  predicted60mStatus: 'GREEN' | 'YELLOW' | 'RED';
+  recommendationExplanation?: string;
+}
+
+export interface StationRecommendationResult {
+  bestStationId: string;
+  recommendedStationName: string;
+  distanceKm: number;
+  currentAvailablePorts: number;
+  predictedWaitMins: number;
+  availablePowerKw: number;
+  renewableAvailabilityPercent: number;
+  recommendationScore: number;
+  explanation: string;
+  allStationScores: {
+    stationId: string;
+    name: string;
+    distanceKm: number;
+    currentAvailablePorts: number;
+    predictedWaitMins: number;
+    availablePowerKw: number;
+    score: number;
+  }[];
+}
+
+export interface GridAnomalyRecord {
+  id: string;
+  timestamp: string;
+  stationOrLocation: string;
+  anomalyType: 'Sudden Load Surge' | 'Unexpected Solar Drop' | 'Abnormal Station Demand' | 'Transformer Overload Risk';
+  expectedValue: string;
+  observedValue: string;
+  deviationPercent: number;
+  confidencePercent: number;
+  possibleCause: string;
+  severity: 'WARNING' | 'CRITICAL';
+}
+
+export interface PredictiveVsReactiveMetrics {
+  reactivePeakLoadKw: number;
+  predictivePeakLoadKw: number;
+  peakReductionKw: number;
+  reactiveSolarUtilizationPercent: number;
+  predictiveSolarUtilizationPercent: number;
+  reactiveLateEvsCount: number;
+  predictiveLateEvsCount: number;
+  reactiveTransformerPeakUtilizationPercent: number;
+  predictiveTransformerPeakUtilizationPercent: number;
+}
+
+export interface MlDatasetRow {
+  timestamp: string;
+  hourOfDay: number;
+  dayOfWeek: number;
+  temperatureC: number;
+  cloudCoverPercent: number;
+  humidityPercent: number;
+  buildingLoadKw: number;
+  solarKw: number;
+  evDemandKw: number;
+  stationOccupancyPercent: number;
+  transformerKva: number;
+  isWeekend: boolean;
 }
 
 export type { FivePortAllocationSummary } from '../services/chargingPortEngine';

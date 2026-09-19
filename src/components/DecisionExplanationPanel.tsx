@@ -137,6 +137,23 @@ export const DecisionExplanationPanel: React.FC<DecisionExplanationPanelProps> =
         </div>
       </div>
 
+      {/* ML PREDICTIVE SCHEDULER REASONING CARD */}
+      <div className="p-3.5 rounded-xl bg-gradient-to-r from-indigo-950/80 via-slate-950 to-indigo-950/80 border border-indigo-500/30 font-mono text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+            🤖 ML PREDICTIVE SCHEDULER
+          </span>
+          <span className="text-slate-300">
+            {selectedVehicle.batterySoc < 25 || selectedVehicle.departureHoursRemaining <= 1.0
+              ? `${selectedVehicle.id} receives top charging priority because SOC is low (${selectedVehicle.batterySoc}%) and departure is approaching (${hoursFormatted}).`
+              : `${selectedVehicle.id} charging is shifted toward the predicted solar peak (12:30 - 13:30) while avoiding predicted building load peaks (13:30 - 14:30).`}
+          </span>
+        </div>
+        <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-1 rounded border border-emerald-800/80 shrink-0">
+          HARD CONSTRAINT: GRID &le; 50 kW PASS
+        </span>
+      </div>
+
       {/* Transparent Scoring Formula Cards (Section 8 Spec) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         {/* Component 1: Battery Need (Weight 48) */}

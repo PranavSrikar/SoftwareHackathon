@@ -19,7 +19,9 @@ import {
   Trash2,
   Sliders
 } from 'lucide-react';
-import { StationMapItem, FivePortAllocationSummary, FlatRecord, ChargingPort } from '../types';
+import { StationMapItem, FivePortAllocationSummary, FlatRecord, ChargingPort, StationRecommendationResult } from '../types';
+import { MlEngine } from '../services/ml/mlEngine';
+import { Brain, Sparkles } from 'lucide-react';
 
 interface LiveMapViewProps {
   portSummary?: FivePortAllocationSummary | null;
@@ -197,6 +199,18 @@ export const LiveMapView: React.FC<LiveMapViewProps> = ({
     etaMins: number;
     steps: string[];
   } | null>(null);
+
+  // ML Station Recommendation Modal State
+  const [showMlRecommendationModal, setShowMlRecommendationModal] = useState(false);
+  const [mlRecommendationResult, setMlRecommendationResult] = useState<StationRecommendationResult | null>(null);
+
+  const handleFindBestStation = () => {
+    const rec = MlEngine.recommendBestStation(calculatedStations, 1.2);
+    setMlRecommendationResult(rec);
+    setShowMlRecommendationModal(true);
+    const best = calculatedStations.find((s) => s.id === rec.bestStationId);
+    if (best) setSelectedStation(best);
+  };
 
   // User location (strictly private)
   const userLocation = { lat: 17.3842, lng: 78.4855, name: 'Your Vehicle Location (Flat 1)' };
@@ -415,6 +429,13 @@ export const LiveMapView: React.FC<LiveMapViewProps> = ({
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
           <button
+            onClick={handleFindBestStation}
+            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-indigo-950"
+          >
+            <Brain className="w-4 h-4 text-indigo-300" />
+            <span>🤖 Find Best Charging Station</span>
+          </button>
+          <button
             onClick={handleDownloadCSV}
             className="px-3 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold text-xs flex items-center gap-1.5 transition-all"
           >
@@ -430,6 +451,99 @@ export const LiveMapView: React.FC<LiveMapViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* ML SMART RECOMMENDATION MODAL */}
+      {showMlRecommendationModal && mlRecommendationResult && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-indigo-500/40 rounded-2xl p-6 max-w-2xl w-full shadow-2xl space-y-5 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
+                  <Brain className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Smart ML Station Recommendation</h3>
+                  <p className="text-[11px] text-slate-400">Holistic score based on distance, predicted wait, power & renewable solar %</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowMlRecommendationModal(false)}
+                className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Winner Card */}
+            <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 border border-indigo-500/50 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-emerald-400 flex items-center gap-1">
+                  <Sparkles className="w-4 h-4" /> RECOMMENDED CHOICE
+                </span>
+                <span className="font-mono font-bold text-indigo-300 bg-indigo-950 px-2.5 py-0.5 rounded border border-indigo-800">
+                  SCORE: {mlRecommendationResult.recommendationScore}/100
+                </span>
+              </div>
+              <h4 className="text-lg font-bold text-white">{mlRecommendationResult.recommendedStationName}</h4>
+              <p className="text-xs text-slate-300 bg-slate-950/80 p-3 rounded-lg border border-slate-800 leading-relaxed">
+                {mlRecommendationResult.explanation}
+              </p>
+              <div className="grid grid-cols-3 gap-2 pt-2 text-center text-xs font-mono">
+                <div className="p-2 rounded bg-slate-950 border border-slate-800">
+                  <div className="text-[10px] text-slate-400">Distance</div>
+                  <div className="font-bold text-white">{mlRecommendationResult.distanceKm} km</div>
+                </div>
+                <div className="p-2 rounded bg-slate-950 border border-slate-800">
+                  <div className="text-[10px] text-slate-400">Predicted Wait</div>
+                  <div className="font-bold text-emerald-400">{mlRecommendationResult.predictedWaitMins} mins</div>
+                </div>
+                <div className="p-2 rounded bg-slate-950 border border-slate-800">
+                  <div className="text-[10px] text-slate-400">Available Power</div>
+                  <div className="font-bold text-cyan-400">{mlRecommendationResult.availablePowerKw} kW</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Comparison Breakdown Table */}
+            <div>
+              <div className="text-xs font-bold text-slate-300 mb-2">All Candidate Stations Scored</div>
+              <div className="overflow-x-auto border border-slate-800 rounded-xl max-h-48 overflow-y-auto">
+                <table className="w-full text-xs text-left text-slate-300">
+                  <thead className="bg-slate-950 text-slate-400 font-mono text-[10px] sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2">STATION</th>
+                      <th className="px-3 py-2">DIST</th>
+                      <th className="px-3 py-2">PREDICTED WAIT</th>
+                      <th className="px-3 py-2">POWER</th>
+                      <th className="px-3 py-2">ML SCORE</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800 font-mono">
+                    {mlRecommendationResult.allStationScores.map((s, idx) => (
+                      <tr key={idx} className={s.stationId === mlRecommendationResult.bestStationId ? 'bg-indigo-950/40 font-bold' : ''}>
+                        <td className="px-3 py-2 text-white">{s.name}</td>
+                        <td className="px-3 py-2 text-slate-400">{s.distanceKm} km</td>
+                        <td className="px-3 py-2 text-emerald-400">{s.predictedWaitMins} min</td>
+                        <td className="px-3 py-2 text-cyan-400">{s.availablePowerKw} kW</td>
+                        <td className="px-3 py-2 text-indigo-400 font-bold">{s.score}/100</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setShowMlRecommendationModal(false)}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs"
+              >
+                Close & Select Station
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Station Modal Form */}
       {showAddForm && (
