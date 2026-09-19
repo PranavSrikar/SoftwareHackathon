@@ -3,6 +3,7 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { handleSmsNotificationRequest } from './src/services/smsEndpointHandler';
 import { ChatService } from './src/services/ai/chatService';
+import { handleFlatsApi } from './src/services/apiMiddleware';
 
 async function startServer() {
   const app = express();
@@ -20,6 +21,9 @@ async function startServer() {
     }
     next();
   });
+
+  // Intercept and handle /api/flats endpoints
+  app.use(handleFlatsApi);
 
   // API Health Endpoint
   app.get('/api/health', (req, res) => {
@@ -115,7 +119,7 @@ async function startServer() {
 
       const sid = twilioSid || process.env.TWILIO_ACCOUNT_SID;
       const token = twilioToken || process.env.TWILIO_AUTH_TOKEN;
-      const from = twilioFrom || process.env.TWILIO_PHONE_NUMBER;
+      const from = twilioFrom || process.env.TWILIO_FROM_NUMBER || process.env.TWILIO_PHONE_NUMBER;
 
       // If Twilio credentials are provided, attempt real REST API dispatch
       if (sid && token && from) {

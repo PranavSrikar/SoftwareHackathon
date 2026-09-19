@@ -2,6 +2,7 @@ import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import { handleSmsNotificationRequest } from '../src/services/smsEndpointHandler';
 import { ChatService } from '../src/services/ai/chatService';
+import { handleFlatsApi } from '../src/services/apiMiddleware';
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -16,6 +17,9 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Intercept and handle /api/flats endpoints
+app.use(handleFlatsApi);
 
 // Initialize Gemini Client lazily to prevent startup crashes if key is missing or invalid
 const getGeminiClient = () => {
@@ -135,7 +139,7 @@ app.post('/api/alerts/send', async (req, res) => {
 
     const sid = twilioSid || process.env.TWILIO_ACCOUNT_SID;
     const token = twilioToken || process.env.TWILIO_AUTH_TOKEN;
-    const from = twilioFrom || process.env.TWILIO_PHONE_NUMBER;
+    const from = twilioFrom || process.env.TWILIO_FROM_NUMBER || process.env.TWILIO_PHONE_NUMBER;
 
     if (sid && token && from) {
       const cleanPhone = phoneNumber.replace(/[^+\d]/g, '');

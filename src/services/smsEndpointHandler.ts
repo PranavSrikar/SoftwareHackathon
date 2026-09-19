@@ -102,19 +102,57 @@ export async function handleSmsNotificationRequest(reqBody: any) {
     // 6. Check Twilio Server Credentials
     const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim().replace(/^["']|["']$/g, '');
     const authToken = process.env.TWILIO_AUTH_TOKEN?.trim().replace(/^["']|["']$/g, '');
-    const fromNumber = process.env.TWILIO_FROM_NUMBER?.trim().replace(/^["']|["']$/g, '');
+    const fromNumber = process.env.TWILIO_FROM_NUMBER?.trim().replace(/^["']|["']$/g, '') || process.env.TWILIO_PHONE_NUMBER?.trim().replace(/^["']|["']$/g, '');
 
     const maskedPhone = maskPhoneNumber(normalizedPhone);
 
-    if (!accountSid || !authToken || !fromNumber) {
-      // DO NOT pretend an SMS was sent if Twilio is unconfigured
+    // Validate if the credentials look like real Twilio SID and Token or if they are placeholders/missing
+    const isPlaceholder = (val?: string) => {
+      if (!val) return true;
+      const lower = val.toLowerCase();
+      return (
+        lower.includes('placeholder') ||
+        lower.includes('your_') ||
+        lower.includes('my_') ||
+        lower === 'twilio_account_sid' ||
+        lower === 'twilio_auth_token' ||
+        lower === 'twilio_from_number' ||
+        lower === 'twilio_phone_number'
+      );
+    };
+
+    const hasSid = accountSid && !isPlaceholder(accountSid);
+    const hasToken = authToken && !isPlaceholder(authToken);
+    const hasFrom = fromNumber && !isPlaceholder(fromNumber);
+
+    // Standard Twilio SIDs start with "AC" and are 34 chars long.
+    const isSidWellFormed = hasSid && /^AC[0-9a-fA-F]{32}$/.test(accountSid);
+    const isTokenWellFormed = hasToken && /^[0-9a-fA-F]{32}$/.test(authToken);
+
+    if (!hasSid || !hasToken || !hasFrom) {
       return {
         statusCode: 200,
         body: {
           success: false,
           mode: 'demo',
           status: 'Demo mode',
-          message: 'Demo mode — no real SMS was sent because Twilio is not configured.',
+          message: 'Demo mode — no real SMS was sent because Twilio environment variables are unconfigured or empty.',
+          maskedPhone,
+          messagePreview: messageText,
+          recipient_id,
+          alert_id,
+        },
+      };
+    }
+
+    if (!isSidWellFormed || !isTokenWellFormed) {
+      return {
+        statusCode: 200,
+        body: {
+          success: false,
+          mode: 'demo',
+          status: 'Demo mode',
+          message: `Demo mode — Twilio credentials appear to be invalid or placeholder formats (SID should start with 'AC' followed by 32 characters, and Token should be a 32-character hex string).`,
           maskedPhone,
           messagePreview: messageText,
           recipient_id,
